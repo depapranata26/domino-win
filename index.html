@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gaple Win Logic — Asisten Domino Pro</title>
+<meta name="description" content="Kalkulator strategi domino gaple: input kartumu, dapatkan langkah menang.">
+<style>
+:root{
+  --felt:#0c352a; --felt-2:#082419; --felt-3:#0f4436;
+  --emas:#d4a017; --emas-muda:#f2d67c; --emas-redup:rgba(212,160,23,.35);
+  --krem:#f6f1e3; --tinta:#1c1a16; --bahaya:#c0392b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:radial-gradient(120% 90% at 50% 0%,var(--felt-3) 0%,var(--felt) 55%,var(--felt-2) 100%);color:var(--krem);min-height:100vh}
+.wrap{max-width:600px;margin:0 auto;padding:16px 14px 60px}
+header{text-align:center;padding:18px 0 6px}
+header .logo{font-size:40px}
+header h1{font-size:26px;letter-spacing:3px;color:var(--emas-muda);margin:4px 0}
+header p{font-size:13px;color:#b9c9bd;font-weight:300}
+.card{background:rgba(0,0,0,.28);border:1px solid var(--emas-redup);border-radius:14px;padding:16px 14px;margin-top:16px;backdrop-filter:blur(2px)}
+.card h2{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--emas-muda);margin-bottom:12px}
+.hint{font-size:12px;color:#9db3a6;margin-top:8px;line-height:1.6}
+/* seg players */
+.seg{display:flex;gap:8px}
+.seg button{flex:1;padding:11px;border:1px solid var(--emas-redup);background:transparent;color:var(--krem);border-radius:9px;font-size:15px;cursor:pointer}
+.seg button.on{background:var(--emas);color:#241a05;font-weight:700;border-color:var(--emas)}
+/* tiles */
+.tile{background:linear-gradient(180deg,#fffdf6,#efe8d2);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:0;box-shadow:0 2px 5px rgba(0,0,0,.4);cursor:pointer;border:2px solid transparent;user-select:none}
+.tile .half{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);aspect-ratio:1/1;width:100%}
+.tile .divi{height:2px;background:#c9bfa5;margin:3px 1px;border-radius:1px}
+.pip{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.pip i{display:block;width:62%;height:62%;border-radius:50%;background:var(--tinta);opacity:0}
+.pip.on i{opacity:1}
+.tile.double .pip i{background:#8e1f1f}
+.picker{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.picker .tile{padding:3px;border-radius:6px}
+.picker .tile.sel{border-color:var(--emas);box-shadow:0 0 0 2px var(--emas),0 2px 8px rgba(0,0,0,.5);transform:translateY(-2px)}
+.picker .tile.gone{opacity:.18;pointer-events:none}
+.handrow{display:flex;gap:8px;flex-wrap:wrap;min-height:76px;align-items:center}
+.handrow .tile{width:56px;cursor:default}
+.handrow .empty{font-size:13px;color:#8fa598}
+.rowbtns{display:flex;gap:8px;margin-top:12px}
+.btn{flex:1;padding:12px;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;text-transform:uppercase}
+.btn.gold{background:linear-gradient(135deg,var(--emas-muda),var(--emas));color:#241a05;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.btn.ghost{background:transparent;border:1px solid var(--emas-redup);color:var(--emas-muda)}
+.btn:active{transform:scale(.97)}
+.btn.big{font-size:17px;padding:15px;margin-top:4px}
+/* ends */
+.ends{display:flex;gap:14px}
+.endbox{flex:1}
+.endbox .lab{font-size:11px;letter-spacing:1px;color:#9db3a6;margin-bottom:6px;text-transform:uppercase}
+.numpick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.numpick button{padding:10px 0;border:1px solid var(--emas-redup);background:transparent;color:var(--krem);border-radius:8px;font-size:16px;font-weight:700;cursor:pointer}
+.numpick button.on{background:var(--emas);color:#241a05;border-color:var(--emas)}
+/* results */
+#hasil{display:none}
+.rec{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,rgba(212,160,23,.18),rgba(212,160,23,.05));border:1px solid var(--emas);border-radius:12px;padding:14px}
+.rec .tile{width:74px;cursor:default;flex:none}
+.rec .rt{font-size:15px;line-height:1.65}
+.rec .rt b{color:var(--emas-muda)}
+.reasons{margin-top:10px;display:grid;gap:8px}
+.reason{background:rgba(255,255,255,.05);border-left:3px solid var(--emas);padding:9px 12px;font-size:13.5px;line-height:1.6;border-radius:0 8px 8px 0}
+.reason.warn{border-left-color:var(--bahaya)}
+.plist{display:flex;gap:8px;flex-wrap:wrap}
+.plist .pitem{position:relative}
+.plist .tile{width:52px;cursor:default}
+.plist .rank{position:absolute;top:-8px;left:-8px;background:var(--emas);color:#241a05;font-size:11px;font-weight:800;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,.5)}
+.suitrow{display:grid;gap:7px;margin-top:4px}
+.suit{display:grid;grid-template-columns:26px 1fr 30px;gap:10px;align-items:center;font-size:13px}
+.suit .bar{height:10px;background:rgba(255,255,255,.1);border-radius:5px;overflow:hidden}
+.suit .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--emas),var(--emas-muda));border-radius:5px}
+.suit .bar i.dead{background:#5a6b62}
+.suit .n{color:#9db3a6;text-align:right}
+.gauge{height:16px;background:rgba(255,255,255,.1);border-radius:8px;overflow:hidden;margin-top:6px}
+.gauge i{display:block;height:100%;background:linear-gradient(90deg,#c0392b,#d4a017,#2ecc71);border-radius:8px;transition:width .6s}
+.glabel{display:flex;justify-content:space-between;font-size:13px;margin-top:6px}
+.glabel b{color:var(--emas-muda);font-size:16px}
+.danger{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.danger .tile{width:52px;cursor:default;border-color:var(--bahaya)}
+details.howto{margin-top:16px;font-size:13px;color:#b9c9bd}
+details.howto summary{cursor:pointer;color:var(--emas-muda);font-weight:600}
+details.howto ol{margin:8px 0 0 18px;line-height:1.8}
+footer{text-align:center;margin-top:26px;font-size:11px;color:#7d9184;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🀄</div>
+    <h1>GAPLE WIN LOGIC</h1>
+    <p>Asisten strategi domino — input kartumu, terima langkah menang.</p>
+  </header>
+
+  <!-- PEMAIN -->
+  <div class="card">
+    <h2>👥 Jumlah Pemain</h2>
+    <div class="seg" id="segPlayers">
+      <button data-p="2">2 Pemain</button>
+      <button data-p="3">3 Pemain</button>
+      <button data-p="4" class="on">4 Pemain</button>
+    </div>
+  </div>
+
+  <!-- TANGAN -->
+  <div class="card">
+    <h2>🂡 Kartumu <span style="float:right" id="handCount">0/7</span></h2>
+    <div class="handrow" id="handRow"><span class="empty">Ketuk 7 kartu di bawah…</span></div>
+    <div class="rowbtns">
+      <button class="btn ghost" id="btnAcak">🎲 Acak</button>
+      <button class="btn ghost" id="btnClearHand">🗑 Hapus</button>
+    </div>
+    <div class="hint">Pilih 7 kartu yang kamu pegang:</div>
+    <div class="picker" id="picker" style="margin-top:8px"></div>
+  </div>
+
+  <!-- MEJA -->
+  <div class="card">
+    <h2>🀅 Ujung Meja Terbuka</h2>
+    <div class="ends">
+      <div class="endbox"><div class="lab">Ujung kiri</div><div class="numpick" id="pickL"></div></div>
+      <div class="endbox"><div class="lab">Ujung kanan</div><div class="numpick" id="pickR"></div></div>
+    </div>
+    <div class="hint">Kosongkan keduanya jika ronde baru dimulai / kamu jalan pertama.</div>
+  </div>
+
+  <!-- TERPAKAI -->
+  <div class="card">
+    <h2>🧮 Kartu yang Sudah Keluar <span style="float:right" id="playedCount">0</span></h2>
+    <div class="hint" style="margin:0 0 8px">Ketuk kartu yang sudah dimainkan (milikmu + lawan) untuk hitung kartu.</div>
+    <div class="picker" id="playedPicker"></div>
+    <div class="rowbtns"><button class="btn ghost" id="btnClearPlayed">🗑 Reset hitungan</button></div>
+  </div>
+
+  <div class="card" style="text-align:center">
+    <button class="btn gold big" id="btnAnalisis" style="width:100%">⚡ Analisis Langkah Menang</button>
+    <div class="hint">Mesin akan menghitung: kartu terbaik saat ini, urutan prioritas main, angka yang kamu kuasai, dan peluang menang.</div>
+  </div>
+
+  <!-- HASIL -->
+  <div id="hasil">
+    <div class="card">
+      <h2>🎯 Rekomendasi Langkah</h2>
+      <div class="rec" id="recBox"></div>
+      <div class="reasons" id="reasons"></div>
+    </div>
+    <div class="card">
+      <h2>📋 Urutan Prioritas Main</h2>
+      <div class="plist" id="plist"></div>
+      <div class="hint">Mainkan dari nomor 1 ke bawah — pilih prioritas tertinggi yang cocok di ujung meja.</div>
+    </div>
+    <div class="card">
+      <h2>💪 Penguasaan Angka</h2>
+      <div class="suitrow" id="suitRows"></div>
+      <div class="hint">Bar = jumlah kartumu yang mengandung angka itu. Angka yang "mati" (sudah habis di luar) berwarna redup.</div>
+    </div>
+    <div class="card">
+      <h2>🔥 Peluang Menang</h2>
+      <div class="gauge"><i id="gaugeBar" style="width:0%"></i></div>
+      <div class="glabel"><span id="gaugeLabel">—</span><b id="gaugePct">—</b></div>
+      <div class="hint" id="gaugeWhy"></div>
+    </div>
+    <div class="card">
+      <h2>⚠️ Kartu Bahaya — Segera Buang</h2>
+      <div class="danger" id="dangerRow"></div>
+      <div class="hint">Poin besar yang rawan nyangkut kalau meja keblokir.</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <button class="btn ghost" id="btnResetAll" style="width:100%">🔄 Ronde Baru — Reset Semua</button>
+    </div>
+  </div>
+
+  <details class="howto">
+    <summary>❓ Cara pakai cepat</summary>
+    <ol>
+      <li>Pilih jumlah pemain & ketuk 7 kartumu.</li>
+      <li>Isi ujung meja yang terbuka (atau kosongkan).</li>
+      <li>Opsional: tandai kartu yang sudah keluar untuk hitung kartu akurat.</li>
+      <li>Tekan <b>Analisis</b> — ikuti rekomendasi & urutan prioritas.</li>
+    </ol>
+  </details>
+
+  <footer>GAPLE WIN LOGIC • main cerdas, menang elegan 🀄</footer>
+</div>
+
+<script>
+// ---------- DATA ----------
+const ALL = [];
+for(let a=0;a<=6;a++) for(let b=a;b<=6;b++) ALL.push({a,b});
+const key = t => t.a+'-'+t.b;
+const state = { hand: [], players: 4, endL: null, endR: null, played: new Set() };
+
+// ---------- RENDER KARTU ----------
+const PIPS = {0:[],1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function pipsHTML(n){
+  let s = '';
+  for(let i=0;i<9;i++) s += `<span class="pip${PIPS[n].includes(i)?' on':''}"><i></i></span>`;
+  return s;
+}
+function tileHTML(t, extra=''){
+  return `<div class="tile${t.a===t.b?' double':''} ${extra}" data-k="${key(t)}">
+    <div class="half">${pipsHTML(t.a)}</div><div class="divi"></div><div class="half">${pipsHTML(t.b)}</div></div>`;
+}
+const T = (a,b) => `${a}-${b}`;
+
+// ---------- PICKER TANGAN ----------
+const picker = document.getElementById('picker');
+picker.innerHTML = ALL.map(t => tileHTML(t)).join('');
+const handRow = document.getElementById('handRow');
+function refreshHand(){
+  document.getElementById('handCount').textContent = state.hand.length + '/7';
+  picker.querySelectorAll('.tile').forEach(el => {
+    el.classList.toggle('sel', state.hand.some(t => key(t)===el.dataset.k));
+    el.classList.toggle('gone', state.played.has(el.dataset.k));
+  });
+  handRow.innerHTML = state.hand.length
+    ? state.hand.map(t => tileHTML(t)).join('')
+    : '<span class="empty">Ketuk 7 kartu di bawah…</span>';
+}
+picker.addEventListener('click', e => {
+  const el = e.target.closest('.tile'); if(!el || el.classList.contains('gone')) return;
+  const k = el.dataset.k;
+  const i = state.hand.findIndex(t => key(t)===k);
+  if(i>=0) state.hand.splice(i,1);
+  else if(state.hand.length<7){ const [a,b]=k.split('-').map(Number); state.hand.push({a,b}); }
+  refreshHand();
+});
+document.getElementById('btnClearHand').onclick = () => { state.hand=[]; refreshHand(); };
+document.getElementById('btnAcak').onclick = () => {
+  const pool=[...ALL]; state.hand=[];
+  for(let i=0;i<7;i++) state.hand.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  refreshHand();
+};
+
+// ---------- PEMAIN ----------
+document.getElementById('segPlayers').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  state.players = +b.dataset.p;
+  document.querySelectorAll('#segPlayers button').forEach(x=>x.classList.toggle('on',x===b));
+});
+
+// ---------- UJUNG MEJA ----------
+function buildEnds(id, prop){
+  const el = document.getElementById(id);
+  let h = `<button data-v="" class="on">—</button>`;
+  for(let n=0;n<=6;n++) h += `<button data-v="${n}">${n}</button>`;
+  el.innerHTML = h;
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    state[prop] = b.dataset.v===''? null : +b.dataset.v;
+    el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  });
+}
+buildEnds('pickL','endL'); buildEnds('pickR','endR');
+
+// ---------- KARTU KELUAR ----------
+const pp = document.getElementById('playedPicker');
+pp.innerHTML = ALL.map(t => tileHTML(t)).join('');
+function refreshPlayed(){
+  document.getElementById('playedCount').textContent = state.played.size;
+  pp.querySelectorAll('.tile').forEach(el => {
+    const on = state.played.has(el.dataset.k);
+    el.style.opacity = on ? '.25' : '1';
+    el.style.borderColor = on ? 'var(--bahaya)' : 'transparent';
+  });
+  refreshHand();
+}
+pp.addEventListener('click', e => {
+  const el = e.target.closest('.tile'); if(!el) return;
+  const k = el.dataset.k;
+  if(state.played.has(k)) state.played.delete(k); else state.played.add(k);
+  // kartu di tangan tidak bisa ditandai keluar
+  state.hand = state.hand.filter(t => !state.played.has(key(t)));
+  refreshPlayed();
+});
+document.getElementById('btnClearPlayed').onclick = () => { state.played.clear(); refreshPlayed(); };
+
+// ---------- MESIN ANALISIS ----------
+function suitCounts(hand){
+  const s = [0,0,0,0,0,0,0];
+  hand.forEach(t => { s[t.a]++; s[t.b]++; });
+  return s;
+}
+function analyze(){
+  const hand = state.hand;
+  if(hand.length===0){ alert('Isi dulu 7 kartumu, Bos!'); return; }
+  const suit = suitCounts(hand);
+  const totalPips = hand.reduce((s,t)=>s+t.a+t.b,0);
+  const maxSuit = Math.max(...suit);
+  // skor tiap kartu: kuasai angka + buang poin besar + balak prioritas
+  const scored = hand.map(t => ({
+    ...t,
+    score: (suit[t.a]+suit[t.b])*10 + (t.a+t.b)*2 + (t.a===t.b?6:0)
+  })).sort((x,y)=>y.score-x.score);
+
+  const {endL:L, endR:R} = state;
+  const playable = (L===null&&R===null) ? scored
+    : scored.filter(t => t.a===L||t.b===L||t.a===R||t.b===R);
+
+  let rec = null; const reasons = [];
+  if(playable.length===0){
+    reasons.push({t:`<b>PASS</b> — tidak ada kartumu yang cocok di ujung ${L} / ${R}.`, w:1});
+    reasons.push({t:`Catat: lawan yang juga pass di angka ini kemungkinan <b>tidak pegang ${L}/${R}</b> — simpan info ini untuk kunci meja nanti.`});
+  } else if(L===null&&R===null){
+    rec = {t:playable[0], end:null};
+    const t = playable[0];
+    reasons.push({t:`<b>Kartu pembuka terkuat: ${t.a}-${t.b}</b> — angka ${t.a} & ${t.b} paling kamu kuasai (${suit[t.a]+suit[t.b]} kartu).`});
+    if(t.a===t.b) reasons.push({t:`Balak ${t.a} ideal untuk pembuka: langsung buang ${t.a*2} poin.`});
+    else reasons.push({t:`Sekaligus membuang ${t.a+t.b} poin dari tanganmu.`});
+  } else {
+    // pilih kartu & ujung terbaik: hasilkan ujung baru yang paling kamu kuasai
+    let best=null;
+    playable.forEach(t => {
+      [[L,'kiri'],[R,'kanan']].forEach(([E,pos]) => {
+        if(E===null||(t.a!==E&&t.b!==E)) return;
+        const open = t.a===E ? t.b : t.a;
+        const s = t.score + suit[open]*8;
+        if(!best||s>best.s) best={s,t,E,pos,open};
+      });
+    });
+    rec = best;
+    const t=best.t;
+    reasons.push({t:`<b>Main ${t.a}-${t.b} di ujung ${best.pos} (${best.E})</b> → ujung meja jadi <b>${best.open}</b>, angka yang kamu kuasai (${suit[best.open]} kartu di tangan).`});
+    reasons.push({t:`Kartu ini membuang <b>${t.a+t.b} poin</b> sekaligus dari tanganmu.`});
+    if(t.a===t.b) reasons.push({t:`Balak ${t.a} aman dibuang sekarang selagi angka ${t.a} masih terbuka di meja.`});
+  }
+
+  // kartu bahaya
+  const danger = [...hand].sort((x,y)=>(y.a+y.b)-(x.a+x.b)).slice(0,3).filter(t=>t.a+t.b>=8);
+
+  // angka mati (habis di luar)
+  const dead = [];
+  for(let n=0;n<=6;n++){
+    const totalN = ALL.filter(t=>t.a===n||t.b===n).length; // 7
+    const outN = [...state.played].filter(k=>{const[a,b]=k.split('-').map(Number);return a===n||b===n;}).length
+               + hand.filter(t=>t.a===n||t.b===n).length;
+    if(outN>=totalN && suit[n]===0) dead.push(n);
+  }
+  if(dead.length) reasons.push({t:`Angka <b>${dead.join(', ')}</b> sudah <b>mati</b> (habis di luar) — jangan buka angka ini, kamu tidak pegang kartunya.`, w:1});
+
+  // peluang menang
+  let pct = {2:50,3:34,4:25}[state.players];
+  const why = [];
+  if(maxSuit>=4){pct+=12;why.push('dominasi angka kuat');}
+  else if(maxSuit===3){pct+=6;why.push('cukup kuasai satu angka');}
+  if(totalPips<=30){pct+=8;why.push('total poin tangan ringan');}
+  else if(totalPips>=55){pct-=8;why.push('total poin tangan berat');}
+  const dbl = hand.filter(t=>t.a===t.b).length;
+  if(dbl>0){pct-=dbl*3;why.push(`${dbl} balak di tangan`);}
+  if(L!==null||R!==null){ if(playable.length>0){pct+=8;why.push('ada kartu jalan');} else {pct-=6;why.push('tidak ada kartu jalan');} }
+  pct = Math.max(5,Math.min(95,Math.round(pct)));
+  const label = pct>=60?'TINGGI':pct>=40?'SEDANG':'RENDAH';
+
+  render(rec, reasons, scored, suit, dead, pct, label, why, danger);
+}
+
+function render(rec, reasons, scored, suit, dead, pct, label, why, danger){
+  document.getElementById('hasil').style.display='block';
+  // rekomendasi
+  document.getElementById('recBox').innerHTML = rec
+    ? `${tileHTML(rec.t)}<div class="rt">${rec.end===null
+        ? `Jalan pertama dengan<br><b style="font-size:22px">${rec.t.a}-${rec.t.b}</b>`
+        : `Mainkan<br><b style="font-size:22px">${rec.t.a}-${rec.t.b}</b><br>di ujung <b>${rec.pos}</b> (${rec.E})`}</div>`
+    : `<div class="rt" style="font-size:22px">🛑 <b>PASS</b> giliran ini</div>`;
+  document.getElementById('reasons').innerHTML =
+    reasons.map(r=>`<div class="reason${r.w?' warn':''}">${r.t}</div>`).join('');
+  // prioritas
+  document.getElementById('plist').innerHTML = scored.map((t,i)=>
+    `<div class="pitem"><span class="rank">${i+1}</span>${tileHTML(t)}</div>`).join('');
+  // suit bars
+  document.getElementById('suitRows').innerHTML = suit.map((c,n)=>{
+    const isDead = dead.includes(n);
+    return `<div class="suit"><span><b>${n}</b></span>
+      <div class="bar"><i class="${isDead?'dead':''}" style="width:${Math.round(c/7*100)}%"></i></div>
+      <span class="n">${isDead?'mati':c+' krt'}</span></div>`;
+  }).join('');
+  // gauge
+  document.getElementById('gaugeBar').style.width = pct+'%';
+  document.getElementById('gaugePct').textContent = pct+'%';
+  document.getElementById('gaugeLabel').textContent = 'Peluang: '+label;
+  document.getElementById('gaugeWhy').textContent = 'Faktor: ' + (why.join(' • ')||'—');
+  // danger
+  document.getElementById('dangerRow').innerHTML = danger.length
+    ? danger.map(t=>tileHTML(t)).join('')
+    : '<span class="hint">Aman — tidak ada kartu poin besar yang rawan.</span>';
+  document.getElementById('hasil').scrollIntoView({behavior:'smooth'});
+}
+
+document.getElementById('btnAnalisis').onclick = analyze;
+document.getElementById('btnResetAll').onclick = () => {
+  state.hand=[]; state.played.clear(); state.endL=null; state.endR=null;
+  document.querySelectorAll('.numpick').forEach(el=>
+    el.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('on',i===0)));
+  refreshPlayed();
+  document.getElementById('hasil').style.display='none';
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+refreshHand(); refreshPlayed();
+</script>
+</body>
+</html>
