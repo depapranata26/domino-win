@@ -78,6 +78,10 @@ header p{font-size:13px;color:#b9c9bd;font-weight:300}
 .glabel b{color:var(--emas-muda);font-size:16px}
 .danger{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .danger .tile{width:52px;cursor:default;border-color:var(--bahaya)}
+#radarLog{max-height:190px;overflow-y:auto;margin:4px 0}
+.logrow{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.05);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:13px}
+.logrow button{background:transparent;border:1px solid var(--emas-redup);color:var(--emas-muda);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px}
+#unseenPicker .tile.sel{border-color:var(--emas);box-shadow:0 0 0 2px var(--emas)}
 details.howto{margin-top:16px;font-size:13px;color:#b9c9bd}
 details.howto summary{cursor:pointer;color:var(--emas-muda);font-weight:600}
 details.howto ol{margin:8px 0 0 18px;line-height:1.8}
@@ -115,6 +119,7 @@ footer{text-align:center;margin-top:26px;font-size:11px;color:#7d9184;letter-spa
       <div class="plist" id="kilatList"></div>
       <div class="hint">Timer 10 detik? Cukup hafalkan <b>3 teratas</b>. Tiap giliran: mainkan yang paling atas yang cocok di ujung meja. Tanpa buka web lagi.</div>
     </div>
+    <div class="hint">☝️ Ketuk kartu di barisan "Kartumu" kalau sudah kamu mainkan — otomatis tercatat di radar.</div>
     <div class="hint">Pilih 7 kartu yang kamu pegang:</div>
     <div class="picker" id="picker" style="margin-top:8px"></div>
   </div>
@@ -129,12 +134,26 @@ footer{text-align:center;margin-top:26px;font-size:11px;color:#7d9184;letter-spa
     <div class="hint">Kosongkan keduanya jika ronde baru dimulai / kamu jalan pertama.</div>
   </div>
 
-  <!-- TERPAKAI -->
+  <!-- RADAR LAWAN -->
   <div class="card">
-    <h2>🧮 Kartu yang Sudah Keluar <span style="float:right" id="playedCount">0</span></h2>
-    <div class="hint" style="margin:0 0 8px">Ketuk kartu yang sudah dimainkan (milikmu + lawan) untuk hitung kartu.</div>
-    <div class="picker" id="playedPicker"></div>
-    <div class="rowbtns"><button class="btn ghost" id="btnClearPlayed">🗑 Reset hitungan</button></div>
+    <h2>🕵️ Radar Lawan <span style="float:right;font-size:11px"><span id="unseenCount">21</span> kartu misteri</span></h2>
+    <div class="hint" style="margin:0 0 10px">Tebak kartu lawan dari <b>aksinya</b>. Tiap giliran lawan cukup <b>2 ketukan</b>: pilih lawan → pass / main kartu. Makin rajin dicatat, makin akurat tebakannya.</div>
+    <div style="font-size:11px;letter-spacing:1px;color:#9db3a6;margin-bottom:6px">PILIH LAWAN</div>
+    <div class="seg" id="segOpp"></div>
+    <div class="rowbtns" style="margin-top:10px">
+      <button class="btn gold" id="btnOppPlay">▶ Main kartu</button>
+      <button class="btn ghost" id="btnOppPass">⏭ Pass</button>
+    </div>
+    <div id="radarAction" style="display:none;margin-top:10px"></div>
+    <div style="font-size:11px;letter-spacing:1px;color:#9db3a6;margin:12px 0 6px">LOG AKSI <span style="text-transform:none;letter-spacing:0">(ketuk ↩ untuk batalkan)</span></div>
+    <div id="radarLog"></div>
+    <div class="rowbtns"><button class="btn ghost" id="btnRadarReset">🗑 Reset radar</button></div>
+    <h2 style="margin-top:16px">🔮 Peta Lawan</h2>
+    <div id="radarMap"></div>
+    <h2 style="margin-top:16px">❓ Bedah Kartu Misteri</h2>
+    <div class="hint" style="margin:0 0 8px">Ketuk kartu yang belum keluar untuk menebak siapa memegangnya.</div>
+    <div class="picker" id="unseenPicker"></div>
+    <div id="unseenDetail" class="hint" style="margin-top:8px;font-size:13px"></div>
   </div>
 
   <div class="card" style="text-align:center">
@@ -266,6 +285,9 @@ document.getElementById('segPlayers').addEventListener('click', e => {
   const b = e.target.closest('button'); if(!b) return;
   state.players = +b.dataset.p;
   document.querySelectorAll('#segPlayers button').forEach(x=>x.classList.toggle('on',x===b));
+  rlog=[]; state.played.clear(); inspectKey=null; selOpp=0; radarMode=null;
+  document.getElementById('radarAction').style.display='none';
+  rebuildOppSeg(); refreshAll();
 });
 
 // ---------- UJUNG MEJA ----------
@@ -282,27 +304,181 @@ function buildEnds(id, prop){
 }
 buildEnds('pickL','endL'); buildEnds('pickR','endR');
 
-// ---------- KARTU KELUAR ----------
-const pp = document.getElementById('playedPicker');
-pp.innerHTML = ALL.map(t => tileHTML(t)).join('');
-function refreshPlayed(){
-  document.getElementById('playedCount').textContent = state.played.size;
-  pp.querySelectorAll('.tile').forEach(el => {
-    const on = state.played.has(el.dataset.k);
-    el.style.opacity = on ? '.25' : '1';
-    el.style.borderColor = on ? 'var(--bahaya)' : 'transparent';
-  });
-  refreshHand();
+// ---------- RADAR LAWAN: tebak kartu musuh ----------
+let rlog = [];            // {type:'play',who:'me'|idx,tile} | {type:'pass',who:idx,num}
+let selOpp = 0, radarMode = null, inspectKey = null;
+
+function oppNames(){ return {2:['Lawan'],3:['Kiri','Kanan'],4:['Kiri','Depan','Kanan']}[state.players]; }
+function unseenTiles(){
+  return ALL.filter(t=>!state.played.has(key(t)) && !state.hand.some(h=>key(h)===key(t)));
 }
-pp.addEventListener('click', e => {
-  const el = e.target.closest('.tile'); if(!el) return;
-  const k = el.dataset.k;
-  if(state.played.has(k)) state.played.delete(k); else state.played.add(k);
-  // kartu di tangan tidak bisa ditandai keluar
-  state.hand = state.hand.filter(t => !state.played.has(key(t)));
-  refreshPlayed();
+function nCr(n,r){
+  if(r<0||r>n||n<0) return 0; r=Math.min(r,n-r);
+  let v=1; for(let i=1;i<=r;i++) v=v*(n-r+i)/i;
+  return Math.round(v);
+}
+// kartu yang mustahil dipegang lawan i (dia pernah pass di angka itu)
+function oppImpossible(i){
+  const s=new Set();
+  rlog.filter(e=>e.type==='pass'&&e.who===i).forEach(e=>{
+    ALL.forEach(t=>{ if(t.a===e.num||t.b===e.num) s.add(key(t)); });
+  });
+  return s;
+}
+function oppHidden(i){
+  return Math.max(0, 7 - rlog.filter(e=>e.type==='play'&&e.who===i).length);
+}
+// P(lawan i memegang kartu t) — aproksimasi marginal seragam
+function pTile(i,t){
+  const k=key(t), imp=oppImpossible(i);
+  if(state.played.has(k)||imp.has(k)) return 0;
+  if(state.hand.some(h=>key(h)===k)) return 0;
+  const pool=unseenTiles().filter(x=>!imp.has(key(x)));
+  const h=oppHidden(i);
+  if(!pool.length||!h) return 0;
+  return Math.min(1, h/pool.length);
+}
+// P(lawan i bisa ikut main di angka n) — hipergeometrik
+function pMatch(i,n){
+  const imp=oppImpossible(i);
+  const pool=unseenTiles().filter(x=>!imp.has(key(x)));
+  const h=oppHidden(i);
+  if(!pool.length||!h) return 0;
+  const withN=pool.filter(t=>t.a===n||t.b===n).length;
+  return 1 - nCr(pool.length-withN,h)/nCr(pool.length,h);
+}
+
+function rebuildOppSeg(){
+  const names=oppNames();
+  if(selOpp>=names.length) selOpp=0;
+  document.getElementById('segOpp').innerHTML =
+    names.map((n,i)=>`<button data-i="${i}" class="${i===selOpp?'on':''}">${n}</button>`).join('');
+}
+document.getElementById('segOpp').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  selOpp=+b.dataset.i; radarMode=null;
+  document.getElementById('radarAction').style.display='none';
+  rebuildOppSeg();
 });
-document.getElementById('btnClearPlayed').onclick = () => { state.played.clear(); refreshPlayed(); };
+function showRadarAction(){
+  const box=document.getElementById('radarAction');
+  box.style.display='block';
+  if(radarMode==='play'){
+    const un=unseenTiles();
+    box.innerHTML=`<div style="font-size:11px;color:#9db3a6;margin-bottom:6px">Kartu yang dimainkan <b>${oppNames()[selOpp]}</b>:</div>
+      <div class="picker">${un.map(t=>tileHTML(t)).join('')||'<span class="hint">Semua kartu sudah terlacak.</span>'}</div>`;
+  }else if(radarMode==='pass'){
+    box.innerHTML=`<div style="font-size:11px;color:#9db3a6;margin-bottom:6px"><b>${oppNames()[selOpp]}</b> pass di angka:</div>
+      <div class="numpick">${[0,1,2,3,4,5,6].map(n=>`<button data-n="${n}">${n}</button>`).join('')}</div>`;
+  }
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+document.getElementById('radarAction').addEventListener('click', e=>{
+  const t=e.target.closest('.tile');
+  if(t&&radarMode==='play'){
+    const [a,b]=t.dataset.k.split('-').map(Number);
+    addLog({type:'play',who:selOpp,tile:{a,b}});
+    return;
+  }
+  const nb=e.target.closest('.numpick button');
+  if(nb&&radarMode==='pass') addLog({type:'pass',who:selOpp,num:+nb.dataset.n});
+});
+document.getElementById('btnOppPlay').onclick=()=>{radarMode='play';showRadarAction();};
+document.getElementById('btnOppPass').onclick=()=>{radarMode='pass';showRadarAction();};
+document.getElementById('btnRadarReset').onclick=()=>{
+  rlog=[]; state.played.clear(); inspectKey=null; radarMode=null;
+  document.getElementById('radarAction').style.display='none';
+  refreshAll();
+};
+function addLog(entry){
+  rlog.push(entry);
+  if(entry.type==='play'){
+    state.played.add(key(entry.tile));
+    if(entry.who==='me'){
+      const i=state.hand.findIndex(t=>key(t)===key(entry.tile));
+      if(i>=0) state.hand.splice(i,1);
+    }
+  }
+  radarMode=null;
+  document.getElementById('radarAction').style.display='none';
+  refreshAll();
+}
+function undoLog(i){
+  const e=rlog[i]; if(!e) return;
+  rlog.splice(i,1);
+  if(e.type==='play'){
+    state.played.delete(key(e.tile));
+    if(e.who==='me'&&state.hand.length<7) state.hand.push(e.tile);
+  }
+  refreshAll();
+}
+document.getElementById('radarLog').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  undoLog(+b.dataset.i);
+});
+// ketuk kartu di tangan sendiri = sudah dimainkan
+document.getElementById('handRow').addEventListener('click', e=>{
+  const t=e.target.closest('.tile'); if(!t) return;
+  const [a,b]=t.dataset.k.split('-').map(Number);
+  addLog({type:'play',who:'me',tile:{a,b}});
+});
+function refreshAll(){ refreshHand(); renderRadar(); }
+
+function renderRadar(){
+  const names=oppNames();
+  // log
+  document.getElementById('radarLog').innerHTML = rlog.length
+    ? [...rlog].reverse().map((e,ri)=>{
+        const i=rlog.length-1-ri;
+        const who=e.who==='me'?'🎴 Saya':names[e.who];
+        const txt=e.type==='play'
+          ? `${who} main <b>${e.tile.a}-${e.tile.b}</b>`
+          : `${who} <b>⏭ pass</b> di angka <b>${e.num}</b>`;
+        return `<div class="logrow"><span>${txt}</span><button data-i="${i}">↩</button></div>`;
+      }).join('')
+    : '<span class="hint">Belum ada catatan.</span>';
+  // peta lawan
+  document.getElementById('radarMap').innerHTML = names.map((n,i)=>{
+    const h=oppHidden(i);
+    const passes=[...new Set(rlog.filter(e=>e.type==='pass'&&e.who===i).map(e=>e.num))].sort((a,b)=>a-b);
+    const bars=[0,1,2,3,4,5,6].map(num=>{
+      const p=pMatch(i,num);
+      return `<div class="suit"><span><b>${num}</b></span><div class="bar"><i style="width:${Math.round(p*100)}%"></i></div><span class="n">${Math.round(p*100)}%</span></div>`;
+    }).join('');
+    return `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px;margin-bottom:8px">
+      <div style="font-weight:700;color:var(--emas-muda);margin-bottom:4px">${n} <span style="color:#9db3a6;font-weight:400;font-size:12px">• ±${h} kartu disembunyikan</span></div>
+      <div style="font-size:12.5px;margin-bottom:6px">💀 Mati di angka: ${passes.length?passes.map(x=>`<b>${x}</b>`).join(', '):'—'}</div>
+      <div class="suitrow">${bars}</div>
+      <div class="hint" style="margin-top:4px">% = perkiraan dia bisa ikut main di angka itu.</div>
+    </div>`;
+  }).join('');
+  // kartu misteri
+  const un=unseenTiles();
+  document.getElementById('unseenCount').textContent=un.length;
+  const up=document.getElementById('unseenPicker');
+  up.innerHTML=un.map(t=>tileHTML(t)).join('')||'<span class="hint">Semua kartu sudah terlacak.</span>';
+  up.querySelectorAll('.tile').forEach(el=>el.classList.toggle('sel', el.dataset.k===inspectKey));
+  renderInspect();
+}
+document.getElementById('unseenPicker').addEventListener('click', e=>{
+  const t=e.target.closest('.tile'); if(!t) return;
+  inspectKey = inspectKey===t.dataset.k ? null : t.dataset.k;
+  document.getElementById('unseenPicker').querySelectorAll('.tile')
+    .forEach(el=>el.classList.toggle('sel', el.dataset.k===inspectKey));
+  renderInspect();
+});
+function renderInspect(){
+  const d=document.getElementById('unseenDetail');
+  if(!inspectKey){ d.innerHTML=''; return; }
+  const [a,b]=inspectKey.split('-').map(Number);
+  const rows=oppNames().map((n,i)=>{
+    const p=Math.round(pTile(i,{a,b})*100);
+    const dead=[...oppImpossible(i)].includes(inspectKey);
+    return `${n}: <b>${p}%</b>${dead?' 💀':''}`;
+  }).join(' &nbsp;•&nbsp; ');
+  const best=oppNames().map((n,i)=>[n,pTile(i,{a,b})]).sort((x,y)=>y[1]-x[1])[0];
+  d.innerHTML=`Kartu <b>${a}-${b}</b> → ${rows}<br>🎯 Paling mungkin dipegang: <b>${best[0]}</b>`;
+}
 
 // ---------- MESIN ANALISIS ----------
 function suitCounts(hand){
@@ -342,20 +518,35 @@ function analyze(){
     if(t.a===t.b) reasons.push({t:`Balak ${t.a} ideal untuk pembuka: langsung buang ${t.a*2} poin.`});
     else reasons.push({t:`Sekaligus membuang ${t.a+t.b} poin dari tanganmu.`});
   } else {
-    // pilih kartu & ujung terbaik: hasilkan ujung baru yang paling kamu kuasai
+    // pilih kartu & ujung terbaik: hasilkan ujung baru yang paling kamu kuasai,
+    // dan (kalau radar aktif) yang paling sulit dibalas lawan
+    const useRadar = rlog.length>0;
     let best=null;
     playable.forEach(t => {
       [[L,'kiri'],[R,'kanan']].forEach(([E,pos]) => {
         if(E===null||(t.a!==E&&t.b!==E)) return;
         const open = t.a===E ? t.b : t.a;
-        const s = t.score + suit[open]*8;
-        if(!best||s>best.s) best={s,t,E,pos,open};
+        let s = t.score + suit[open]*8;
+        let risk=null;
+        if(useRadar){
+          const ps=oppNames().map((n,i)=>({n,p:pMatch(i,open)}));
+          const mx=ps.reduce((a,b)=>b.p>a.p?b:a);
+          risk={max:mx.p,who:mx.n};
+          s -= mx.p*40;
+        }
+        if(!best||s>best.s) best={s,t,E,pos,open,risk};
       });
     });
     rec = best;
     const t=best.t;
     reasons.push({t:`<b>Main ${t.a}-${t.b} di ujung ${best.pos} (${best.E})</b> → ujung meja jadi <b>${best.open}</b>, angka yang kamu kuasai (${suit[best.open]} kartu di tangan).`});
     reasons.push({t:`Kartu ini membuang <b>${t.a+t.b} poin</b> sekaligus dari tanganmu.`});
+    if(best.risk){
+      const pct=Math.round(best.risk.max*100);
+      if(best.risk.max>=0.65) reasons.push({t:`⚠️ <b>Radar:</b> ~${pct}% ada lawan yang bisa membalas di angka ${best.open} (tertinggi: ${best.risk.who}) — waspada!`,w:1});
+      else if(best.risk.max<=0.35) reasons.push({t:`✅ <b>Radar:</b> angka ${best.open} aman — hanya ~${pct}% peluang lawan bisa ikut main.`});
+      else reasons.push({t:`<b>Radar:</b> ~${pct}% peluang lawan (${best.risk.who}) bisa ikut di angka ${best.open}.`});
+    }
     if(t.a===t.b) reasons.push({t:`Balak ${t.a} aman dibuang sekarang selagi angka ${t.a} masih terbuka di meja.`});
   }
 
@@ -423,9 +614,11 @@ function render(rec, reasons, scored, suit, dead, pct, label, why, danger){
 document.getElementById('btnAnalisis').onclick = analyze;
 document.getElementById('btnResetAll').onclick = () => {
   state.hand=[]; state.played.clear(); state.endL=null; state.endR=null;
+  rlog=[]; inspectKey=null; selOpp=0; radarMode=null;
+  document.getElementById('radarAction').style.display='none';
   document.querySelectorAll('.numpick').forEach(el=>
     el.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('on',i===0)));
-  refreshPlayed();
+  rebuildOppSeg(); refreshAll();
   document.getElementById('hasil').style.display='none';
   window.scrollTo({top:0,behavior:'smooth'});
 };
@@ -458,7 +651,7 @@ document.getElementById('btnStatReset').onclick = () => {
   if(confirm('Hapus semua statistik?')){ stats={w:0,l:0,streak:0,hist:[]}; saveStats(); renderStats(); }
 };
 renderStats();
-refreshHand(); refreshPlayed();
+rebuildOppSeg(); refreshAll();
 </script>
 </body>
 </html>
