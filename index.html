@@ -142,6 +142,22 @@ footer{text-align:center;margin-top:26px;font-size:11px;color:#7d9184;letter-spa
     <div class="hint">Mesin akan menghitung: kartu terbaik saat ini, urutan prioritas main, angka yang kamu kuasai, dan peluang menang.</div>
   </div>
 
+  <!-- TRACKER RASIO -->
+  <div class="card">
+    <h2>📊 Rasio Kemenangan</h2>
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="font-size:42px;font-weight:800;color:var(--emas-muda);line-height:1" id="statPct">—</div>
+      <div style="font-size:13px;color:#9db3a6;line-height:1.7" id="statDetail">Belum ada data.<br>Catat hasil tiap ronde!</div>
+    </div>
+    <div id="statHist" style="display:flex;gap:4px;margin:10px 0 2px;flex-wrap:wrap;min-height:14px"></div>
+    <div class="rowbtns">
+      <button class="btn gold" id="btnWin">✅ Menang</button>
+      <button class="btn ghost" id="btnLose">❌ Kalah</button>
+    </div>
+    <div class="rowbtns"><button class="btn ghost" id="btnStatReset">🗑 Reset statistik</button></div>
+    <div class="hint">Ketuk hasil tiap ronde selesai main. Data tersimpan di HP-mu.</div>
+  </div>
+
   <!-- HASIL -->
   <div id="hasil">
     <div class="card">
@@ -413,6 +429,35 @@ document.getElementById('btnResetAll').onclick = () => {
   document.getElementById('hasil').style.display='none';
   window.scrollTo({top:0,behavior:'smooth'});
 };
+// ---------- TRACKER RASIO KEMENANGAN ----------
+let stats = {w:0,l:0,streak:0,hist:[]};
+try{ stats = Object.assign(stats, JSON.parse(localStorage.getItem('gapleStats')||'{}')); }catch(e){}
+function saveStats(){ try{ localStorage.setItem('gapleStats', JSON.stringify(stats)); }catch(e){} }
+function renderStats(){
+  const t = stats.w + stats.l;
+  const pct = t ? Math.round(stats.w/t*100) : null;
+  document.getElementById('statPct').textContent = pct===null ? '—' : pct+'%';
+  const s = stats.streak;
+  document.getElementById('statDetail').innerHTML =
+    `Menang <b style="color:#2ecc71">${stats.w}</b> &bull; Kalah <b style="color:#e74c3c">${stats.l}</b> &bull; Total ${t}<br>` +
+    (s>0 ? `🔥 Streak menang ${s}x` : s<0 ? `❄️ Streak kalah ${-s}x — pertimbangkan istirahat` : 'Belum ada streak');
+  document.getElementById('statHist').innerHTML = stats.hist.slice(-24).map(r =>
+    `<span style="width:14px;height:14px;border-radius:4px;background:${r?'#2ecc71':'#e74c3c'};display:inline-block"></span>`).join('');
+}
+function logResult(win){
+  win ? stats.w++ : stats.l++;
+  const last = stats.hist[stats.hist.length-1];
+  const cur = win?1:0;
+  stats.streak = (last===cur) ? stats.streak + (win?1:-1) : (win?1:-1);
+  stats.hist.push(cur);
+  saveStats(); renderStats();
+}
+document.getElementById('btnWin').onclick = () => logResult(true);
+document.getElementById('btnLose').onclick = () => logResult(false);
+document.getElementById('btnStatReset').onclick = () => {
+  if(confirm('Hapus semua statistik?')){ stats={w:0,l:0,streak:0,hist:[]}; saveStats(); renderStats(); }
+};
+renderStats();
 refreshHand(); refreshPlayed();
 </script>
 </body>
