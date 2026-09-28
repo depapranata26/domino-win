@@ -110,6 +110,11 @@ footer{text-align:center;margin-top:26px;font-size:11px;color:#7d9184;letter-spa
       <button class="btn ghost" id="btnAcak">🎲 Acak</button>
       <button class="btn ghost" id="btnClearHand">🗑 Hapus</button>
     </div>
+    <div id="kilatBox" style="display:none;margin-top:12px;background:rgba(212,160,23,.08);border:1px dashed var(--emas);border-radius:10px;padding:12px">
+      <div style="font-size:12px;letter-spacing:2px;color:var(--emas-muda);margin-bottom:8px">⚡ MODE KILAT — HAFALKAN URUTAN INI</div>
+      <div class="plist" id="kilatList"></div>
+      <div class="hint">Timer 10 detik? Cukup hafalkan <b>3 teratas</b>. Tiap giliran: mainkan yang paling atas yang cocok di ujung meja. Tanpa buka web lagi.</div>
+    </div>
     <div class="hint">Pilih 7 kartu yang kamu pegang:</div>
     <div class="picker" id="picker" style="margin-top:8px"></div>
   </div>
@@ -216,6 +221,14 @@ function refreshHand(){
   handRow.innerHTML = state.hand.length
     ? state.hand.map(t => tileHTML(t)).join('')
     : '<span class="empty">Ketuk 7 kartu di bawah…</span>';
+  // mode kilat: urutan prioritas otomatis begitu 7 kartu lengkap
+  const kb = document.getElementById('kilatBox');
+  if(state.hand.length===7){
+    kb.style.display='block';
+    document.getElementById('kilatList').innerHTML =
+      priorityOrder(state.hand).map((t,i)=>
+        `<div class="pitem"><span class="rank">${i+1}</span>${tileHTML(t)}</div>`).join('');
+  } else kb.style.display='none';
 }
 picker.addEventListener('click', e => {
   const el = e.target.closest('.tile'); if(!el || el.classList.contains('gone')) return;
@@ -281,6 +294,14 @@ function suitCounts(hand){
   hand.forEach(t => { s[t.a]++; s[t.b]++; });
   return s;
 }
+// urutan prioritas: kuasai angka + buang poin besar + balak duluan
+function priorityOrder(hand){
+  const suit = suitCounts(hand);
+  return hand.map(t => ({
+    ...t,
+    score: (suit[t.a]+suit[t.b])*10 + (t.a+t.b)*2 + (t.a===t.b?6:0)
+  })).sort((x,y)=>y.score-x.score);
+}
 function analyze(){
   const hand = state.hand;
   if(hand.length===0){ alert('Isi dulu 7 kartumu, Bos!'); return; }
@@ -288,10 +309,7 @@ function analyze(){
   const totalPips = hand.reduce((s,t)=>s+t.a+t.b,0);
   const maxSuit = Math.max(...suit);
   // skor tiap kartu: kuasai angka + buang poin besar + balak prioritas
-  const scored = hand.map(t => ({
-    ...t,
-    score: (suit[t.a]+suit[t.b])*10 + (t.a+t.b)*2 + (t.a===t.b?6:0)
-  })).sort((x,y)=>y.score-x.score);
+  const scored = priorityOrder(hand);
 
   const {endL:L, endR:R} = state;
   const playable = (L===null&&R===null) ? scored
